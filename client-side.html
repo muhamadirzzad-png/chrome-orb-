@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RETROLENS Hand Tracking</title>
+    <title>RETROLENS Hand Tracking - Smooth</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body {
@@ -32,23 +32,20 @@
             transform: scaleX(-1);
         }
 
-        /* Overlay Header bergaya RETROLENS Python */
         #header-overlay {
             position: fixed;
             top: 15px;
             left: 20px;
             z-index: 10;
             color: #00ffcc;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: bold;
             text-shadow: 0 0 5px rgba(0,0,0,0.8), 1px 1px 2px #000;
             pointer-events: none;
-            line-height: 1.5;
+            line-height: 1.4;
         }
 
-        #header-overlay .yellow {
-            color: #ffff00;
-        }
+        #header-overlay .yellow { color: #ffff00; }
 
         #start-btn {
             position: fixed;
@@ -77,11 +74,11 @@
 </div>
 
 <div id="header-overlay">
-    <div id="mode-info" class="yellow">MODE: 3D (Full 5 Jari) [Kepal 2 Tangan untuk Ubah Mode]</div>
-    <div id="filter-info">FILTER: GLITCH [Sentuh Jempol-Kelingking untuk Ubah Filter]</div>
+    <div id="mode-info" class="yellow">MODE: 3D (Full 5 Jari) [Kepal 2 Tangan]</div>
+    <div id="filter-info">FILTER: GLITCH [Sentuh Jempol-Kelingking]</div>
 </div>
 
-<button id="start-btn">MULAI RETROLENS 🎥</button>
+<button id="start-btn">MULAI RETROLENS (SMOOTH) 🎥</button>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
@@ -96,7 +93,7 @@ const startBtn = document.getElementById('start-btn');
 const modes = ['3D (Full 5 Jari)', 'PERSEGI 2D', 'BOWTIE 2D'];
 let currentModeIndex = 0;
 
-const filters = ['GLITCH', 'SKETCH', 'THERMAL', 'INVERT', 'CARTOON', 'RAINBOW_WAVE', 'EDGES', 'RED_CHANNEL', 'PIXELATE'];
+const filters = ['GLITCH', 'SKETCH', 'THERMAL', 'INVERT', 'CARTOON', 'EDGES', 'RED_CHANNEL'];
 let currentFilterIndex = 0;
 
 let lastFilterSwitchTime = 0;
@@ -104,51 +101,44 @@ let lastModeSwitchTime = 0;
 
 function updateHeaderUI() {
     document.getElementById('mode-info').textContent = `MODE: ${modes[currentModeIndex]} [Kepal 2 Tangan]`;
-    document.getElementById('filter-info').textContent = `FILTER: ${filters[currentFilterIndex]} [Sentuh Jempol-Kelingking]`;
+    document.getElementById('filter-info').textContent = `FILTER: ${filters[currentFilterIndex]} [Jempol-Kelingking]`;
 }
 
-// Setup MediaPipe Hands
+// Setup MediaPipe Hands dengan setting ringan (modelComplexity: 0)
 const hands = new Hands({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
 });
 
 hands.setOptions({
     maxNumHands: 2,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.6,
-    minTrackingConfidence: 0.6
+    modelComplexity: 0, // Dibuat 0 agar sangat ringan dan ngebut di HP
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
 });
 
 hands.onResults((results) => {
     if (canvas.width !== video.videoWidth) {
         canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
+        canvas.height = video.videoHeight || 360;
     }
 
     ctx.save();
-    // Gambar Video Asli
     ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
     const landmarks = results.multiHandLandmarks;
 
     if (landmarks && landmarks.length > 0) {
-        // 1. GAMBAR SKELETON TANGAN & BINTIK SENDI (Style Python MediaPipe)
         for (const hand of landmarks) {
-            // Garis penghubung putih tebal
             drawConnectors(ctx, hand, HAND_CONNECTIONS, { color: '#ffffff', lineWidth: 2 });
-            // Titik sendi jari (kuning & biru)
-            drawLandmarks(ctx, hand, { color: '#ffff00', fillColor: '#0055ff', lineWidth: 1, radius: 4 });
+            drawLandmarks(ctx, hand, { color: '#ffff00', fillColor: '#0055ff', lineWidth: 1, radius: 3 });
         }
 
-        // 2. DETEKSI GERAKAN TANGAN (GESTURE CONTROL)
         checkHandGestures(landmarks);
 
-        // 3. JIKA 2 TANGAN DIDETEKSI -> GAMBAR OVERLAY EFEK PERSPEKTIF
         if (landmarks.length === 2) {
             const h1 = landmarks[0];
             const h2 = landmarks[1];
 
-            // Titik Sudut Poligon (Jempol & Kelingking / Telunjuk kedua tangan)
             const p1 = { x: h1[4].x * canvas.width, y: h1[4].y * canvas.height };  
             const p2 = { x: h1[20].x * canvas.width, y: h1[20].y * canvas.height }; 
             const p3 = { x: h2[20].x * canvas.width, y: h2[20].y * canvas.height }; 
@@ -161,24 +151,18 @@ hands.onResults((results) => {
     ctx.restore();
 });
 
-// Deteksi Isyarat Jari / Tangan untuk Mengubah Mode & Filter
 function checkHandGestures(landmarks) {
     const now = Date.now();
-
-    // Fungsi hitung jarak 2 titik landmark
     const getDist = (pt1, pt2) => Math.hypot(pt1.x - pt2.x, pt1.y - pt2.y);
 
     for (const hand of landmarks) {
-        // Sentuh Jempol (Index 4) dan Kelingking (Index 20) -> Ganti Filter
-        const thumbPinkyDist = getDist(hand[4], hand[20]);
-        if (thumbPinkyDist < 0.08 && (now - lastFilterSwitchTime > 1000)) {
+        if (getDist(hand[4], hand[20]) < 0.08 && (now - lastFilterSwitchTime > 1000)) {
             currentFilterIndex = (currentFilterIndex + 1) % filters.length;
             lastFilterSwitchTime = now;
             updateHeaderUI();
         }
     }
 
-    // Jika 2 tangan mengepal (Fist) -> Ganti Mode
     if (landmarks.length === 2) {
         const isFist1 = getDist(landmarks[0][8], landmarks[0][0]) < 0.25;
         const isFist2 = getDist(landmarks[1][8], landmarks[1][0]) < 0.25;
@@ -191,18 +175,15 @@ function checkHandGestures(landmarks) {
     }
 }
 
-// Render Perspektif Poligon & Efek Filter Visual
 function renderRetroLensFilter(points) {
     ctx.save();
 
-    // Mode Bowtie (Menyilangkan koordinat)
     if (modes[currentModeIndex] === 'BOWTIE 2D') {
         let temp = points[2];
         points[2] = points[3];
         points[3] = temp;
     }
 
-    // Path Poligon
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i++) {
@@ -210,20 +191,17 @@ function renderRetroLensFilter(points) {
     }
     ctx.closePath();
 
-    // Garis Frame Putih Neon
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 3;
     ctx.shadowColor = '#ffffff';
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 8;
     ctx.stroke();
 
-    // Mode 3D Box (Efek Perspektif Kedalaman Kubus)
     if (modes[currentModeIndex] === '3D (Full 5 Jari)') {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
         ctx.lineWidth = 1.5;
-        const offset = 45;
+        const offset = 35;
 
-        // Rusuk Belakang
         ctx.beginPath();
         ctx.moveTo(points[0].x - offset, points[0].y - offset);
         ctx.lineTo(points[1].x - offset, points[1].y - offset);
@@ -232,7 +210,6 @@ function renderRetroLensFilter(points) {
         ctx.closePath();
         ctx.stroke();
 
-        // Garis Penghubung Depan ke Belakang
         for (let i = 0; i < 4; i++) {
             ctx.beginPath();
             ctx.moveTo(points[i].x, points[i].y);
@@ -241,7 +218,6 @@ function renderRetroLensFilter(points) {
         }
     }
 
-    // Potong Area Sesuai Poligon Tangan
     ctx.clip();
 
     const minX = Math.max(0, Math.floor(Math.min(...points.map(p => p.x))));
@@ -261,23 +237,20 @@ function renderRetroLensFilter(points) {
     ctx.restore();
 }
 
-// Algoritma Filter Piksel (RetroLens Filter Presets)
 function processFilterPixels(imgData, filter) {
     const d = imgData.data;
-    const t = Date.now() * 0.004;
-
     for (let i = 0; i < d.length; i += 4) {
         let r = d[i], g = d[i+1], b = d[i+2];
         let gray = 0.299 * r + 0.587 * g + 0.114 * b;
 
         switch (filter) {
             case 'GLITCH':
-                d[i] = (r + 50) % 255;
-                d[i+1] = (gray + 80) % 255;
-                d[i+2] = (b * 2) % 255;
+                d[i] = (r + 40) % 255;
+                d[i+1] = gray;
+                d[i+2] = (b * 1.5) % 255;
                 break;
             case 'SKETCH':
-                let v = gray > 100 ? 255 : 0;
+                let v = gray > 110 ? 255 : 0;
                 d[i] = v; d[i+1] = v; d[i+2] = v;
                 break;
             case 'THERMAL':
@@ -293,28 +266,17 @@ function processFilterPixels(imgData, filter) {
                 d[i+1] = Math.floor(g / 80) * 80;
                 d[i+2] = Math.floor(b / 80) * 80;
                 break;
-            case 'RAINBOW_WAVE':
-                d[i] = Math.sin(t + gray * 0.04) * 127 + 128;
-                d[i+1] = Math.sin(t + gray * 0.04 + 2) * 127 + 128;
-                d[i+2] = Math.sin(t + gray * 0.04 + 4) * 127 + 128;
-                break;
             case 'EDGES':
                 let edge = gray < 90 ? 255 : 0;
                 d[i] = 0; d[i+1] = edge; d[i+2] = edge;
                 break;
             case 'RED_CHANNEL':
-                d[i] = 255; d[i+1] = gray * 0.15; d[i+2] = gray * 0.15;
-                break;
-            case 'PIXELATE':
-                d[i] = Math.floor(r / 50) * 50;
-                d[i+1] = Math.floor(g / 50) * 50;
-                d[i+2] = Math.floor(b / 50) * 50;
+                d[i] = 255; d[i+1] = gray * 0.1; d[i+2] = gray * 0.1;
                 break;
         }
     }
 }
 
-// Jalankan Kamera
 startBtn.addEventListener('click', async () => {
     startBtn.style.display = 'none';
     updateHeaderUI();
@@ -323,8 +285,8 @@ startBtn.addEventListener('click', async () => {
             onFrame: async () => {
                 await hands.send({ image: video });
             },
-            width: 1280,
-            height: 720
+            width: 640,
+            height: 360
         });
         await cameraUtils.start();
     } catch (e) {
@@ -335,3 +297,4 @@ startBtn.addEventListener('click', async () => {
 </script>
 </body>
 </html>
+
