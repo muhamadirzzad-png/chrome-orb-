@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Hand Tracking Particles - Improved</title>
+    <title>3D Hand Tracking - Fast & Smooth</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { 
@@ -14,13 +14,12 @@
             font-family: Arial, sans-serif; 
         }
 
-        /* Container Kamera & Skeleton Canvas */
         #cam-container {
             position: fixed;
             top: 15px;
             right: 15px;
-            width: 140px;
-            height: 105px;
+            width: 130px;
+            height: 95px;
             border-radius: 12px;
             border: 2px solid rgba(255, 255, 255, 0.4);
             overflow: hidden;
@@ -47,8 +46,8 @@
 
         @media (orientation: landscape) {
             #cam-container {
-                width: 120px;
-                height: 90px;
+                width: 110px;
+                height: 80px;
                 top: 10px;
                 right: 10px;
             }
@@ -135,55 +134,78 @@ const startBtn = document.getElementById('start');
 const loading = document.getElementById('loading');
 const ui = document.getElementById('ui');
 
-const NUM_PARTICLES = 4000;
+// Optimasi jumlah partikel agar tidak nge-lag di HP (3000 Pts)
+const NUM_PARTICLES = 3000;
 let scene, camera3D, renderer, particleSystem, geometry;
 let currentPositions = new Float32Array(NUM_PARTICLES * 3);
 let targetPositions = new Float32Array(NUM_PARTICLES * 3);
 let currentColors = new Float32Array(NUM_PARTICLES * 3);
 let targetColors = new Float32Array(NUM_PARTICLES * 3);
 
-let activeShape = "sphere";
+let activeShape = "random";
 let targetHandX = 0;
 let targetHandY = 0;
 
 // ==========================================
-// FORMULA BENTUK PARTIKEL 3D (FRONT FACING)
+// FORMULA BENTUK PARTIKEL
 // ==========================================
 
-function generateSphere() {
+function generateRandomParticles() {
     const pos = new Float32Array(NUM_PARTICLES * 3);
     const col = new Float32Array(NUM_PARTICLES * 3);
     for (let i = 0; i < NUM_PARTICLES; i++) {
-        const u = Math.random(), v = Math.random();
-        const theta = u * 2.0 * Math.PI, phi = Math.acos(2.0 * v - 1.0);
-        const r = 4.0 + Math.random() * 0.5;
+        pos[i * 3]     = (Math.random() - 0.5) * 20;
+        pos[i * 3 + 1] = (Math.random() - 0.5) * 20;
+        pos[i * 3 + 2] = (Math.random() - 0.5) * 12;
 
-        pos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
-        pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-        pos[i * 3 + 2] = r * Math.cos(phi);
-
-        // Biru & Cyan Glow
-        col[i * 3]     = 0.1 + Math.random() * 0.3;
-        col[i * 3 + 1] = 0.6 + Math.random() * 0.4;
-        col[i * 3 + 2] = 0.9 + Math.random() * 0.1;
+        col[i * 3]     = 0.2 + Math.random() * 0.4;
+        col[i * 3 + 1] = 0.5 + Math.random() * 0.4;
+        col[i * 3 + 2] = 0.8 + Math.random() * 0.2;
     }
     return { pos, col };
 }
 
-function generateCube() {
+function generateTextILoveYou() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 50px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('I LOVE YOU', canvas.width / 2, canvas.height / 2);
+
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const validPixels = [];
+
+    for (let y = 0; y < canvas.height; y += 2) {
+        for (let x = 0; x < canvas.width; x += 2) {
+            const index = (y * canvas.width + x) * 4;
+            if (imgData[index] > 128) {
+                const posX = (x - canvas.width / 2) * 0.032;
+                const posY = (canvas.height / 2 - y) * 0.032;
+                validPixels.push({ x: posX, y: posY });
+            }
+        }
+    }
+
     const pos = new Float32Array(NUM_PARTICLES * 3);
     const col = new Float32Array(NUM_PARTICLES * 3);
-    for (let i = 0; i < NUM_PARTICLES; i++) {
-        pos[i * 3]     = (Math.random() - 0.5) * 7;
-        pos[i * 3 + 1] = (Math.random() - 0.5) * 7;
-        pos[i * 3 + 2] = (Math.random() - 0.5) * 7;
 
-        // Cyan / Magenta Glowing
-        if (Math.random() > 0.5) {
-            col[i * 3]     = 0.0; col[i * 3 + 1] = 0.9; col[i * 3 + 2] = 1.0;
-        } else {
-            col[i * 3]     = 1.0; col[i * 3 + 1] = 0.2; col[i * 3 + 2] = 0.8;
-        }
+    for (let i = 0; i < NUM_PARTICLES; i++) {
+        const p = validPixels[i % validPixels.length];
+        pos[i * 3]     = p.x + (Math.random() - 0.5) * 0.1;
+        pos[i * 3 + 1] = p.y + (Math.random() - 0.5) * 0.1;
+        pos[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+
+        // Biru Cyan Glowing 💙
+        col[i * 3]     = 0.0;
+        col[i * 3 + 1] = 0.85;
+        col[i * 3 + 2] = 1.0;
     }
     return { pos, col };
 }
@@ -195,19 +217,18 @@ function generateHeart() {
         const t = Math.random() * Math.PI * 2;
         const scale = 0.25;
         
-        // Formula Heart 2D/3D Tegak Menghadap Kamera (XY plane)
         const x = 16 * Math.pow(Math.sin(t), 3);
         const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
-        const z = (Math.random() - 0.5) * 4;
+        const z = (Math.random() - 0.5) * 3;
 
         pos[i * 3]     = x * scale;
         pos[i * 3 + 1] = y * scale;
         pos[i * 3 + 2] = z * scale;
 
-        // Neon Red / Pink Glowing
+        // Merah Neon ❤️
         col[i * 3]     = 1.0;
-        col[i * 3 + 1] = 0.05 + Math.random() * 0.25;
-        col[i * 3 + 2] = 0.3 + Math.random() * 0.4;
+        col[i * 3 + 1] = 0.05;
+        col[i * 3 + 2] = 0.3;
     }
     return { pos, col };
 }
@@ -217,26 +238,23 @@ function generateSaturn() {
     const col = new Float32Array(NUM_PARTICLES * 3);
     for (let i = 0; i < NUM_PARTICLES; i++) {
         if (i < NUM_PARTICLES * 0.45) {
-            // Inti Bola Oranye
             const u = Math.random(), v = Math.random();
             const theta = u * 2.0 * Math.PI, phi = Math.acos(2.0 * v - 1.0);
-            const r = 2.2;
+            const r = 2.0;
             pos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
             pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
             pos[i * 3 + 2] = r * Math.cos(phi);
 
             col[i * 3]     = 1.0; 
-            col[i * 3 + 1] = 0.4 + Math.random() * 0.3; 
+            col[i * 3 + 1] = 0.4; 
             col[i * 3 + 2] = 0.0;
         } else {
-            // Cincin Kuning Miring Menghadap Kamera
             const angle = Math.random() * Math.PI * 2;
-            const dist = 3.6 + Math.random() * 2.6;
+            const dist = 3.2 + Math.random() * 2.2;
             const rx = Math.cos(angle) * dist;
-            const ry = (Math.random() - 0.5) * 0.3;
+            const ry = (Math.random() - 0.5) * 0.2;
             const rz = Math.sin(angle) * dist;
 
-            // Rotasi cincin 30 derajat agar kelihatan 3D menghadap depan
             const cosA = Math.cos(0.4), sinA = Math.sin(0.4);
             pos[i * 3]     = rx;
             pos[i * 3 + 1] = ry * cosA - rz * sinA;
@@ -250,32 +268,50 @@ function generateSaturn() {
     return { pos, col };
 }
 
-const shapes = {
-    sphere: generateSphere(),
-    cube: generateCube(),
-    heart: generateHeart(),
-    saturn: generateSaturn()
-};
+function generateCube() {
+    const pos = new Float32Array(NUM_PARTICLES * 3);
+    const col = new Float32Array(NUM_PARTICLES * 3);
+    for (let i = 0; i < NUM_PARTICLES; i++) {
+        pos[i * 3]     = (Math.random() - 0.5) * 6;
+        pos[i * 3 + 1] = (Math.random() - 0.5) * 6;
+        pos[i * 3 + 2] = (Math.random() - 0.5) * 6;
+
+        col[i * 3]     = 1.0; 
+        col[i * 3 + 1] = 0.1; 
+        col[i * 3 + 2] = 0.8;
+    }
+    return { pos, col };
+}
+
+let shapes = {};
 
 // ==========================================
 // THREE.JS SETUP
 // ==========================================
 
 function initThree() {
+    shapes = {
+        random: generateRandomParticles(),
+        text: generateTextILoveYou(),
+        heart: generateHeart(),
+        saturn: generateSaturn(),
+        cube: generateCube()
+    };
+
     const container = document.getElementById('webgl-container');
     scene = new THREE.Scene();
 
     camera3D = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera3D.position.z = 13;
 
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     container.appendChild(renderer.domElement);
 
     geometry = new THREE.BufferGeometry();
     
-    const initData = shapes.sphere;
+    const initData = shapes.random;
     for (let i = 0; i < NUM_PARTICLES * 3; i++) {
         currentPositions[i] = initData.pos[i];
         targetPositions[i]  = initData.pos[i];
@@ -287,7 +323,7 @@ function initThree() {
     geometry.setAttribute('color', new THREE.BufferAttribute(currentColors, 3));
 
     const material = new THREE.PointsMaterial({
-        size: 0.12,
+        size: 0.14,
         vertexColors: true,
         transparent: true,
         opacity: 0.9,
@@ -298,7 +334,6 @@ function initThree() {
     scene.add(particleSystem);
 
     window.addEventListener('resize', onWindowResize);
-    window.addEventListener('orientationchange', onWindowResize);
 }
 
 function onWindowResize() {
@@ -322,14 +357,12 @@ function setTargetShape(shapeName) {
 // ==========================================
 
 function processHand(lm) {
-    // 1. Dapatkan posisi tengah telapak tangan (MCP Jari Tengah - Landmark 9)
-    const palmX = (0.5 - lm[9].x) * 14; // Skala gerak horizontal 3D
-    const palmY = (0.5 - lm[9].y) * 10; // Skala gerak vertikal 3D
+    const palmX = (0.5 - lm[9].x) * 14;
+    const palmY = (0.5 - lm[9].y) * 10;
     
     targetHandX = palmX;
     targetHandY = palmY;
 
-    // 2. Deteksi Jari Terbuka
     const wrist = lm[0];
     const dist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
 
@@ -351,13 +384,13 @@ function processHand(lm) {
         ui.textContent = "✊ GENGGAM → BENTUK HEART ❤️";
     }
     else if (indexOpen && middleOpen && ringOpen && pinkyOpen) {
-        setTargetShape('sphere');
-        ui.textContent = "✋ TELAPAK BUKA → BOLA PARTIKEL";
+        setTargetShape('text');
+        ui.textContent = "✋ TELAPAK BUKA → TEKS I LOVE YOU 💙";
     }
 }
 
 // ==========================================
-// MEDIAPIPE HANDS & DRAW SKELETON
+// MEDIAPIPE HANDS
 // ==========================================
 
 const hands = new Hands({
@@ -366,32 +399,31 @@ const hands = new Hands({
 
 hands.setOptions({
     maxNumHands: 1,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.6,
-    minTrackingConfidence: 0.6
+    modelComplexity: 0, // Diturunkan ke 0 agar AI sangat ringan & responsif
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
 });
 
 hands.onResults((results) => {
-    // Canvas Skeleton Reset
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
 
-        // Gambar Garis & Titik Tangan (Skeleton)
-        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FFCC', lineWidth: 3 });
-        drawLandmarks(canvasCtx, landmarks, { color: '#FF0055', lineWidth: 2, radius: 4 });
+        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FFCC', lineWidth: 2 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#FF0055', lineWidth: 1, radius: 3 });
 
         processHand(landmarks);
     } else {
+        setTargetShape('random');
         ui.textContent = "✋ TUNJUKKAN GESTUR JARI";
     }
     canvasCtx.restore();
 });
 
 // ==========================================
-// RENDER LOOP (ANIMASI LERP)
+// RENDER LOOP (FAST & SMOOTH TRANSITION)
 // ==========================================
 
 function animate() {
@@ -400,20 +432,23 @@ function animate() {
     const positions = geometry.attributes.position.array;
     const colorsArr = geometry.attributes.color.array;
 
-    // Lerp Posisi Partikel ke Bentuk Baru
+    // Kecepatan transisi LERP dinaikkan jadi 0.20 agar gerakannya kilat & super smooth!
     for (let i = 0; i < NUM_PARTICLES * 3; i++) {
-        positions[i] += (targetPositions[i] - positions[i]) * 0.08;
-        colorsArr[i] += (targetColors[i] - colorsArr[i]) * 0.08;
+        positions[i] += (targetPositions[i] - positions[i]) * 0.20;
+        colorsArr[i] += (targetColors[i] - colorsArr[i]) * 0.20;
     }
     geometry.attributes.position.needsUpdate = true;
     geometry.attributes.color.needsUpdate = true;
 
-    // Partikel Mengikuti Posisi Tangan 3D secara Halus
     if (particleSystem) {
-        particleSystem.position.x += (targetHandX - particleSystem.position.x) * 0.1;
-        particleSystem.position.y += (targetHandY - particleSystem.position.y) * 0.1;
+        particleSystem.position.x += (targetHandX - particleSystem.position.x) * 0.15;
+        particleSystem.position.y += (targetHandY - particleSystem.position.y) * 0.15;
 
-        particleSystem.rotation.y += 0.005;
+        if (activeShape !== 'text') {
+            particleSystem.rotation.y += 0.008;
+        } else {
+            particleSystem.rotation.y = 0;
+        }
     }
 
     renderer.render(scene, camera3D);
@@ -436,13 +471,12 @@ startBtn.addEventListener('click', async () => {
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+            video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 360 } },
             audio: false
         });
 
         video.srcObject = stream;
 
-        // Atur ukuran canvas skeleton sesuai ukuran video
         video.onloadedmetadata = () => {
             canvasElement.width = video.videoWidth;
             canvasElement.height = video.videoHeight;
@@ -452,8 +486,8 @@ startBtn.addEventListener('click', async () => {
             onFrame: async () => {
                 await hands.send({ image: video });
             },
-            width: 640,
-            height: 480
+            width: 480,
+            height: 360
         });
 
         cameraUtils.start();
@@ -468,5 +502,4 @@ startBtn.addEventListener('click', async () => {
 </script>
 
 </body>
- </html>
- 
+</html>
