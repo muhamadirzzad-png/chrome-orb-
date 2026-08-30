@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RETROLENS Exact Hand Contour</title>
+    <title>RETROLENS Organic Curved Lens</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body {
@@ -74,7 +74,7 @@
 </div>
 
 <div id="header-overlay">
-    <div id="mode-info" class="yellow">MODE: IKUTI BENTUK JARI 🖐️</div>
+    <div id="mode-info" class="yellow">MODE: ORGANIC SPLINE CURVE 🏹</div>
     <div id="filter-info">FILTER: SKETCH [Sentuh Jempol + Kelingking untuk Ganti]</div>
 </div>
 
@@ -92,8 +92,7 @@ const startBtn = document.getElementById('start-btn');
 
 const filters = ['SKETCH', 'GLITCH', 'THERMAL', 'INVERT', 'CARTOON', 'EDGES', 'RED_CHANNEL'];
 let currentFilterIndex = 0;
-
-let isTouching = false; // Mencegah filter berubah terus menerus sebelum jari dilepas
+let isTouching = false;
 
 function updateHeaderUI() {
     document.getElementById('filter-info').textContent = `FILTER: ${filters[currentFilterIndex]} [Sentuh Jempol + Kelingking]`;
@@ -112,8 +111,8 @@ hands.setOptions({
 
 hands.onResults((results) => {
     if (canvas.width !== video.videoWidth) {
-        canvas.width = video.videoWidth || 1280;
-        canvas.height = video.videoHeight || 720;
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 360;
     }
 
     ctx.save();
@@ -127,78 +126,87 @@ hands.onResults((results) => {
             drawLandmarks(ctx, hand, { color: '#ffff00', fillColor: '#0055ff', lineWidth: 1, radius: 3 });
         }
 
-        // Cek Gestur Sentuh Jempol & Kelingking (Hanya ganti sekali saat bersentuhan)
         checkTouchGesture(landmarks[0]);
 
-        // Jika ada 2 tangan, buat area filter mengikuti persis kontur ujung-ujung jari kedua tangan
         if (landmarks.length === 2) {
             const h1 = landmarks[0];
             const h2 = landmarks[1];
 
-            // Mengambil titik ujung jari (Jempol, Telunjuk, Jari Tengah, Manis, Kelingking) untuk membentuk kurva tangan yang akurat
-            let contourPoints = [
-                { x: h1[4].x * canvas.width, y: h1[4].y * canvas.height },
-                { x: h1[8].x * canvas.width, y: h1[8].y * canvas.height },
-                { x: h1[12].x * canvas.width, y: h1[12].y * canvas.height },
-                { x: h1[16].x * canvas.width, y: h1[16].y * canvas.height },
-                { x: h1[20].x * canvas.width, y: h1[20].y * canvas.height },
-                { x: h2[20].x * canvas.width, y: h2[20].y * canvas.height },
-                { x: h2[16].x * canvas.width, y: h2[16].y * canvas.height },
-                { x: h2[12].x * canvas.width, y: h2[12].y * canvas.height },
-                { x: h2[8].x * canvas.width, y: h2[8].y * canvas.height },
-                { x: h2[4].x * canvas.width, y: h2[4].y * canvas.height }
+            // Menambahkan titik tengah telapak tangan (landmark 0) sebagai jangkar lengkungan dalam agar bentuknya menyerupai busur penuh
+            let points = [
+                { x: h1[4].x * canvas.width, y: h1[4].y * canvas.height },   
+                { x: h1[8].x * canvas.width, y: h1[8].y * canvas.height },   
+                { x: h1[12].x * canvas.width, y: h1[12].y * canvas.height }, 
+                { x: h1[16].x * canvas.width, y: h1[16].y * canvas.height }, 
+                { x: h1[20].x * canvas.width, y: h1[20].y * canvas.height }, 
+                { x: h1[0].x * canvas.width,  y: h1[0].y * canvas.height },  // Titik tengah pergelangan tangan 1
+                { x: h2[20].x * canvas.width, y: h2[20].y * canvas.height }, 
+                { x: h2[16].x * canvas.width, y: h2[16].y * canvas.height }, 
+                { x: h2[12].x * canvas.width, y: h2[12].y * canvas.height }, 
+                { x: h2[8].x * canvas.width, y: h2[8].y * canvas.height },   
+                { x: h2[4].x * canvas.width, y: h2[4].y * canvas.height },
+                { x: h2[0].x * canvas.width,  y: h2[0].y * canvas.height }   // Titik tengah pergelangan tangan 2
             ];
 
-            renderContourFilter(contourPoints);
+            renderOrganicCurveFilter(points);
         }
     }
 
     ctx.restore();
 });
 
-// Fungsi pengaman agar filter TIDAK BERUBAH SENDIRI kecuali jempol & kelingking benar-benar bersentuhan
 function checkTouchGesture(hand) {
     const getDist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
-    const distance = getDist(hand[4], hand[20]); // Jarak ujung jempol (4) dan kelingking (20)
+    const distance = getDist(hand[4], hand[20]);
 
-    // Jika jarak sangat dekat (bersentuhan)
     if (distance < 0.06) {
         if (!isTouching) {
             currentFilterIndex = (currentFilterIndex + 1) % filters.length;
             updateHeaderUI();
-            isTouching = true; // Kunci agar tidak ganti terus menerus
+            isTouching = true;
         }
     } else {
-        // Jika jari dibuka kembali, reset kunci sentuhan
         if (distance > 0.12) {
             isTouching = false;
         }
     }
 }
 
-// Render filter berdasarkan bentuk lengkungan ujung jari tangan
-function renderContourFilter(points) {
+// Algoritma Smooth Bezier Interpolation agar bentuk kurva benar-benar mengalir tanpa patah-patah sudut
+function renderOrganicCurveFilter(points) {
     ctx.save();
 
     ctx.beginPath();
+    let n = points.length;
     ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
+
+    for (let i = 0; i < n; i++) {
+        let p0 = points[(i - 1 + n) % n];
+        let p1 = points[i];
+        let p2 = points[(i + 1) % n];
+        let p3 = points[(i + 2) % n];
+
+        let cp1x = p1.x + (p2.x - p0.x) / 6;
+        let cp1y = p1.y + (p2.y - p0.y) / 6;
+        let cp2x = p2.x - (p3.x - p1.x) / 6;
+        let cp2y = p2.y - (p3.y - p1.y) / 6;
+
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
     }
     ctx.closePath();
 
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#00ffcc';
+    ctx.lineWidth = 4;
     ctx.shadowColor = '#00ffcc';
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 15;
     ctx.stroke();
 
     ctx.clip();
 
-    const minX = Math.max(0, Math.floor(Math.min(...points.map(p => p.x))));
-    const minY = Math.max(0, Math.floor(Math.min(...points.map(p => p.y))));
-    const maxX = Math.min(canvas.width, Math.ceil(Math.max(...points.map(p => p.x))));
-    const maxY = Math.min(canvas.height, Math.ceil(Math.max(...points.map(p => p.y))));
+    const minX = Math.max(0, Math.floor(Math.min(...points.map(p => p.x))) - 20);
+    const minY = Math.max(0, Math.floor(Math.min(...points.map(p => p.y))) - 20);
+    const maxX = Math.min(canvas.width, Math.ceil(Math.max(...points.map(p => p.x))) + 20);
+    const maxY = Math.min(canvas.height, Math.ceil(Math.max(...points.map(p => p.y))) + 20);
 
     const w = maxX - minX;
     const h = maxY - minY;
@@ -212,7 +220,6 @@ function renderContourFilter(points) {
     ctx.restore();
 }
 
-// Filter warna yang benar-benar stabil dan statis (tidak berubah-ubah sendiri kecuali diganti gestur)
 function applyStaticFilter(imgData, filter) {
     const d = imgData.data;
     for (let i = 0; i < d.length; i += 4) {
@@ -261,8 +268,8 @@ startBtn.addEventListener('click', async () => {
             onFrame: async () => {
                 await hands.send({ image: video });
             },
-            width: 1280,
-            height: 720
+            width: 640,
+            height: 360
         });
         await cameraUtils.start();
     } catch (e) {
@@ -273,5 +280,6 @@ startBtn.addEventListener('click', async () => {
 </script>
 </body>
 </html>
+
 
 
