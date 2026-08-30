@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Chrome Orb Hand Tracking</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        font-family: Arial, sans-serif;
+    }
+
+    #camera {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transform: scaleX(-1);
+    }
+
+    #canvas {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+    }
+
+    #ui {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10;
+        padding: 10px 18px;
+        border: 1px solid rgba(255,255,255,.2);
+        border-radius: 30px;
+        background: rgba(0,0,0,.45);
+        backdrop-filter: blur(10px);
+        color: white;
+        font-size: 14px;
+        letter-spacing: 1px;
+        text-align: center;
+    }
+
+    #start {
+        position: fixed;
+        z-index: 20;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        padding: 16px 28px;
+        border: none;
+        border-radius: 30px;
+        background: white;
+        color: black;
+        font-size: 16px;
+        font-weight: bold;
+        box-shadow: 0 0 30px rgba(255,255,255,.4);
+        cursor: pointer;
+    }
+
+    #loading {
+        position: fixed;
+        z-index: 15;
+        left: 50%;
+        top: 55%;
+        transform: translateX(-50%);
+        color: white;
+        font-size: 14px;
+        display: none;
+    }
+</style>
+</head>
+
+<body>
+
+<video id="camera" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
+
+<div id="ui">✊ GENGGAM → ORB OFF</div>
+<button id="start">AKTIFKAN KAMERA</button>
+<div id="loading">Memuat hand tracking...</div>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+<script>
+const video = document.getElementById("camera");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const startButton = document.getElementById("start");
+const loading = document.getElementById("loading");
+const ui = document.getElementById("ui");
+
+let camera;
+let started = false;
+
+let orb = {
+    x: window.innerWidth / 2,
+    y: window.innerHeight / 2,
+    size: 0,
+    targetX: window.innerWidth / 2,
+    targetY: window.innerHeight / 2,
+    targetSize: 0,
+    targetAlpha: 0,
+    alpha: 0
+};
+
+// ===============================
+// RESIZE CANVAS
+// ===============================
+function resizeCanvas() {
+    canvas.width = window.innerWidth * devicePixelRatio;
+    canvas.height = window.innerHeight * devicePixelRatio;
+    canvas.style.width = window.innerWidth + "px";
+    canvas.style.height = window.innerHeight + "px";
+
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+}
+
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+// ===============================
+// UTILS & CEK JARI
+// ===============================
+function distance(a, b) {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+// Deteksi berdasarkan jarak landmark ke pergelangan tangan (Wrist - Index 0)
+// Jauh lebih akurat meski tangan diputar / miring
+function isOpenPalm(lm) {
+    const wrist = lm[0];
+    
+    const indexTip = distance(lm[8], wrist);
+    const indexPip = distance(lm[6], wrist);
+    
+    const middleTip = distance(lm[12], wrist);
+    const middlePip = distance(lm[10], wrist);
+    
+    const ringTip = distance(lm[16], wrist);
+    const ringPip = distance(lm[14], wrist);
+
+    const pinkyTip = distance(lm[20], wrist);
+    const pinkyPip = distance(lm[18], wrist);
+
+    let openFingers = 0;
+    if (indexTip > indexPip) openFingers++;
+    if (middleTip > middlePip) openFingers++;
+    if (ringTip > ringPip) openFingers++;
+    if (pinkyTip > pinkyPip) openFingers++;
+
+    return openFingers >= 3;
+}
+
+// ===============================
+// MEDIAPIPE HANDS
+// ===============================
+const hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.65,
+    minTrackingConfidence: 0.65
+});
+
+hands.onResults((results) => {
+    if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+        orb.targetAlpha = 0;
+        ui.textContent = "✋ TUNJUKKAN TANGAN";
+        return;
+    }
+
+    const lm = results.multiHandLandmarks[0];
+    const palm = lm[9]; // Middle finger MCP (Pusat Telapak)
+
+    // Perbaikan Mirrored Position:
+    // Karena video pakai scaleX(-1), (1 - palm.x) cocok agar orb persis di atas telapak di layar
+    const screenX = (1 - palm.x) * window.innerWidth;
+    const screenY = palm.y * window.innerHeight;
+
+    const palmWidth = distance(lm[5], lm[17]);
+    let orbSize = palmWidth * window.innerWidth * 1.45;
+    orbSize = Math.max(80, Math.min(320, orbSize));
+
+    if (isOpenPalm(lm)) {
+        orb.targetX = screenX;
+        orb.targetY = screenY;
+        orb.targetSize = orbSize;
+        orb.targetAlpha = 1;
+        ui.textContent = "✋ ORB AKTIF";
+    } else {
+        orb.targetAlpha = 0;
+        ui.textContent = "✊ GENGGAM → ORB OFF";
+    }
+});
+
+// ===============================
+// GAME LOOP (RENDER ENGINE)
+// ===============================
+function renderLoop() {
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+    // Interpolasi Smooth (Lerp)
+    orb.x += (orb.targetX - orb.x) * 0.18;
+    orb.y += (orb.targetY - orb.y) * 0.18;
+    orb.size += (orb.targetSize - orb.size) * 0.18;
+
+    if (orb.targetAlpha === 1) {
+        orb.alpha += (1 - orb.alpha) * 0.15;
+    } else {
+        orb.alpha += (0 - orb.alpha) * 0.12;
+    }
+
+    if (orb.alpha > 0.001) {
+        drawChromeOrb();
+    }
+
+    requestAnimationFrame(renderLoop);
+}
+
+// Jalankan Main Loop Render
+requestAnimationFrame(renderLoop);
+
+// ===============================
+// CHROME ORB DRAWING
+// ===============================
+function drawChromeOrb() {
+    const x = orb.x;
+    const y = orb.y;
+    const r = orb.size / 2;
+
+    ctx.save();
+    ctx.globalAlpha = orb.alpha;
+
+    // Outer Glow
+    const glow = ctx.createRadialGradient(x, y, r * 0.5, x, y, r * 1.35);
+    glow.addColorStop(0, "rgba(255,255,255,0)");
+    glow.addColorStop(0.65, "rgba(180,220,255,.15)");
+    glow.addColorStop(1, "rgba(255,255,255,0)");
+
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Chrome Body
+    const chrome = ctx.createRadialGradient(x - r * 0.32, y - r * 0.38, r * 0.05, x, y, r);
+    chrome.addColorStop(0, "#ffffff");
+    chrome.addColorStop(0.12, "#dff5ff");
+    chrome.addColorStop(0.25, "#777f87");
+    chrome.addColorStop(0.42, "#f8fbff");
+    chrome.addColorStop(0.55, "#383d42");
+    chrome.addColorStop(0.72, "#dce3e8");
+    chrome.addColorStop(0.88, "#171a1d");
+    chrome.addColorStop(1, "#050607");
+
+    ctx.fillStyle = chrome;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Reflection
+    const reflection = ctx.createRadialGradient(x - r * 0.35, y - r * 0.45, 0, x - r * 0.35, y - r * 0.45, r * 0.55);
+    reflection.addColorStop(0, "rgba(255,255,255,.95)");
+    reflection.addColorStop(0.18, "rgba(255,255,255,.55)");
+    reflection.addColorStop(0.5, "rgba(255,255,255,.08)");
+    reflection.addColorStop(1, "rgba(255,255,255,0)");
+
+    ctx.fillStyle = reflection;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Specular Highlight
+    ctx.fillStyle = "rgba(255,255,255,.8)";
+    ctx.beginPath();
+    ctx.ellipse(x - r * 0.32, y - r * 0.42, r * 0.12, r * 0.25, -0.45, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Edge
+    ctx.strokeStyle = "rgba(255,255,255,.35)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+// ===============================
+// START CAMERA
+// ===============================
+startButton.addEventListener("click", async () => {
+    startButton.style.display = "none";
+    loading.style.display = "block";
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: "user",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            },
+            audio: false
+        });
+
+        video.srcObject = stream;
+
+        camera = new Camera(video, {
+            onFrame: async () => {
+                await hands.send({ image: video });
+            },
+            width: 1280,
+            height: 720
+        });
+
+        camera.start();
+        loading.style.display = "none";
+        started = true;
+
+    } catch (error) {
+        loading.style.display = "none";
+        startButton.style.display = "block";
+        startButton.textContent = "KAMERA GAGAL";
+        console.error(error);
+        alert("Kamera tidak bisa diakses. Pastikan izin kamera diberikan.");
+    }
+});
+</script>
+
+</body>
+</html>
