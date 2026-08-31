@@ -1,504 +1,1559 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Hand Tracking - Fast & Smooth</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { 
-            width: 100vw; 
-            height: 100vh; 
-            overflow: hidden; 
-            background: #000; 
-            font-family: Arial, sans-serif; 
-        }
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width,
+               initial-scale=1.0,
+               maximum-scale=1.0,
+               user-scalable=no">
 
-        #cam-container {
-            position: fixed;
-            top: 15px;
-            right: 15px;
-            width: 130px;
-            height: 95px;
-            border-radius: 12px;
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            overflow: hidden;
-            z-index: 10;
-            background: #000;
-        }
+<title>Blue Whale Hand AR</title>
 
-        #camera {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transform: scaleX(-1);
-        }
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
 
-        #skeleton-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            transform: scaleX(-1);
-        }
+html,body{
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#000;
+    font-family:Arial,sans-serif;
+}
 
-        @media (orientation: landscape) {
-            #cam-container {
-                width: 110px;
-                height: 80px;
-                top: 10px;
-                right: 10px;
-            }
-        }
+#camera{
+    position:fixed;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    transform:scaleX(-1);
+    z-index:1;
+}
 
-        #webgl-container {
-            position: fixed;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-        }
+#threeCanvas{
+    position:fixed;
+    inset:0;
+    width:100%;
+    height:100%;
+    z-index:2;
+    pointer-events:none;
+}
 
-        #ui {
-            position: fixed;
-            top: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-            padding: 8px 20px;
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 30px;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(8px);
-            color: #fff;
-            font-size: 13px;
-            font-weight: bold;
-            text-align: center;
-            letter-spacing: 1px;
-            white-space: nowrap;
-        }
+#handCanvas{
+    position:fixed;
+    inset:0;
+    width:100%;
+    height:100%;
+    z-index:3;
+    pointer-events:none;
+}
 
-        #start {
-            position: fixed;
-            z-index: 20;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            padding: 16px 32px;
-            border: none;
-            border-radius: 30px;
-            background: #fff;
-            color: #000;
-            font-size: 16px;
-            font-weight: bold;
-            box-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
-            cursor: pointer;
-        }
+#loading{
+    position:fixed;
+    inset:0;
+    z-index:20;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    flex-direction:column;
+    background:#000;
+    color:white;
+    text-align:center;
+}
 
-        #loading {
-            position: fixed;
-            z-index: 15;
-            left: 50%;
-            top: 58%;
-            transform: translateX(-50%);
-            color: #fff;
-            font-size: 14px;
-            display: none;
-        }
-    </style>
+.loader{
+    width:45px;
+    height:45px;
+    border:4px solid rgba(255,255,255,.2);
+    border-top:4px solid white;
+    border-radius:50%;
+    animation:spin 1s linear infinite;
+    margin-bottom:20px;
+}
+
+@keyframes spin{
+    to{
+        transform:rotate(360deg);
+    }
+}
+
+#start{
+    position:fixed;
+    left:50%;
+    bottom:35px;
+    transform:translateX(-50%);
+    z-index:30;
+
+    border:1px solid rgba(255,255,255,.4);
+    background:rgba(0,0,0,.6);
+    color:white;
+
+    padding:14px 28px;
+    border-radius:30px;
+
+    font-size:15px;
+    font-weight:bold;
+
+    backdrop-filter:blur(10px);
+}
+
+#info{
+    position:fixed;
+    top:20px;
+    left:20px;
+    z-index:10;
+
+    color:white;
+
+    font-size:11px;
+    letter-spacing:1px;
+
+    background:rgba(0,0,0,.35);
+    padding:10px 14px;
+    border-radius:12px;
+
+    backdrop-filter:blur(8px);
+
+    opacity:.8;
+}
+
+#status{
+    margin-top:8px;
+    color:#66d9ff;
+}
+
+#error{
+    position:fixed;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+
+    width:85%;
+
+    color:white;
+    text-align:center;
+
+    background:rgba(0,0,0,.8);
+    border:1px solid rgba(255,255,255,.2);
+
+    padding:20px;
+    border-radius:18px;
+
+    z-index:50;
+
+    display:none;
+}
+</style>
 </head>
+
 <body>
 
-<div id="cam-container">
-    <video id="camera" autoplay playsinline></video>
-    <canvas id="skeleton-canvas"></canvas>
+<!-- CAMERA -->
+<video id="camera" autoplay muted playsinline></video>
+
+<!-- THREE.JS -->
+<canvas id="threeCanvas"></canvas>
+
+<!-- HAND LANDMARK -->
+<canvas id="handCanvas"></canvas>
+
+<div id="loading">
+
+    <div class="loader"></div>
+
+    <div>
+        Menyiapkan Blue Whale AR...
+    </div>
+
 </div>
 
-<div id="webgl-container"></div>
+<div id="info">
+    BLUE WHALE AR
+    <div id="status">
+        Menunggu kamera...
+    </div>
+</div>
 
-<div id="ui">✋ TUNJUKKAN GESTUR JARI</div>
-<button id="start">AKTIFKAN KAMERA</button>
-<div id="loading">Memuat MediaPipe & Three.js...</div>
+<button id="start">
+    AKTIFKAN KAMERA
+</button>
 
+<div id="error"></div>
+
+
+<!-- THREE.JS -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+<!-- MEDIAPIPE -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
 
 <script>
-const video = document.getElementById('camera');
-const canvasElement = document.getElementById('skeleton-canvas');
-const canvasCtx = canvasElement.getContext('2d');
-const startBtn = document.getElementById('start');
-const loading = document.getElementById('loading');
-const ui = document.getElementById('ui');
 
-// Optimasi jumlah partikel agar tidak nge-lag di HP (3000 Pts)
-const NUM_PARTICLES = 3000;
-let scene, camera3D, renderer, particleSystem, geometry;
-let currentPositions = new Float32Array(NUM_PARTICLES * 3);
-let targetPositions = new Float32Array(NUM_PARTICLES * 3);
-let currentColors = new Float32Array(NUM_PARTICLES * 3);
-let targetColors = new Float32Array(NUM_PARTICLES * 3);
+/* =========================================================
+   ELEMENT
+========================================================= */
 
-let activeShape = "random";
-let targetHandX = 0;
-let targetHandY = 0;
+const video =
+    document.getElementById("camera");
 
-// ==========================================
-// FORMULA BENTUK PARTIKEL
-// ==========================================
+const threeCanvas =
+    document.getElementById("threeCanvas");
 
-function generateRandomParticles() {
-    const pos = new Float32Array(NUM_PARTICLES * 3);
-    const col = new Float32Array(NUM_PARTICLES * 3);
-    for (let i = 0; i < NUM_PARTICLES; i++) {
-        pos[i * 3]     = (Math.random() - 0.5) * 20;
-        pos[i * 3 + 1] = (Math.random() - 0.5) * 20;
-        pos[i * 3 + 2] = (Math.random() - 0.5) * 12;
+const handCanvas =
+    document.getElementById("handCanvas");
 
-        col[i * 3]     = 0.2 + Math.random() * 0.4;
-        col[i * 3 + 1] = 0.5 + Math.random() * 0.4;
-        col[i * 3 + 2] = 0.8 + Math.random() * 0.2;
-    }
-    return { pos, col };
-}
+const handCtx =
+    handCanvas.getContext("2d");
 
-function generateTextILoveYou() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 128;
-    const ctx = canvas.getContext('2d');
-    
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 50px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('I LOVE YOU', canvas.width / 2, canvas.height / 2);
+const loading =
+    document.getElementById("loading");
 
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    const validPixels = [];
+const startBtn =
+    document.getElementById("start");
 
-    for (let y = 0; y < canvas.height; y += 2) {
-        for (let x = 0; x < canvas.width; x += 2) {
-            const index = (y * canvas.width + x) * 4;
-            if (imgData[index] > 128) {
-                const posX = (x - canvas.width / 2) * 0.032;
-                const posY = (canvas.height / 2 - y) * 0.032;
-                validPixels.push({ x: posX, y: posY });
-            }
-        }
-    }
+const statusText =
+    document.getElementById("status");
 
-    const pos = new Float32Array(NUM_PARTICLES * 3);
-    const col = new Float32Array(NUM_PARTICLES * 3);
+const errorBox =
+    document.getElementById("error");
 
-    for (let i = 0; i < NUM_PARTICLES; i++) {
-        const p = validPixels[i % validPixels.length];
-        pos[i * 3]     = p.x + (Math.random() - 0.5) * 0.1;
-        pos[i * 3 + 1] = p.y + (Math.random() - 0.5) * 0.1;
-        pos[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
 
-        // Biru Cyan Glowing 💙
-        col[i * 3]     = 0.0;
-        col[i * 3 + 1] = 0.85;
-        col[i * 3 + 2] = 1.0;
-    }
-    return { pos, col };
-}
+/* =========================================================
+   GLOBAL
+========================================================= */
 
-function generateHeart() {
-    const pos = new Float32Array(NUM_PARTICLES * 3);
-    const col = new Float32Array(NUM_PARTICLES * 3);
-    for (let i = 0; i < NUM_PARTICLES; i++) {
-        const t = Math.random() * Math.PI * 2;
-        const scale = 0.25;
-        
-        const x = 16 * Math.pow(Math.sin(t), 3);
-        const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
-        const z = (Math.random() - 0.5) * 3;
+let scene;
+let renderer;
+let whale;
+let whaleGroup;
+let boundingBox;
 
-        pos[i * 3]     = x * scale;
-        pos[i * 3 + 1] = y * scale;
-        pos[i * 3 + 2] = z * scale;
+let handsDetected = 0;
 
-        // Merah Neon ❤️
-        col[i * 3]     = 1.0;
-        col[i * 3 + 1] = 0.05;
-        col[i * 3 + 2] = 0.3;
-    }
-    return { pos, col };
-}
+let targetX = 0;
+let targetY = 0;
+let targetScale = 1;
 
-function generateSaturn() {
-    const pos = new Float32Array(NUM_PARTICLES * 3);
-    const col = new Float32Array(NUM_PARTICLES * 3);
-    for (let i = 0; i < NUM_PARTICLES; i++) {
-        if (i < NUM_PARTICLES * 0.45) {
-            const u = Math.random(), v = Math.random();
-            const theta = u * 2.0 * Math.PI, phi = Math.acos(2.0 * v - 1.0);
-            const r = 2.0;
-            pos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
-            pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-            pos[i * 3 + 2] = r * Math.cos(phi);
+let currentX = 0;
+let currentY = 0;
+let currentScale = 1;
 
-            col[i * 3]     = 1.0; 
-            col[i * 3 + 1] = 0.4; 
-            col[i * 3 + 2] = 0.0;
-        } else {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 3.2 + Math.random() * 2.2;
-            const rx = Math.cos(angle) * dist;
-            const ry = (Math.random() - 0.5) * 0.2;
-            const rz = Math.sin(angle) * dist;
+let targetRotX = 0;
+let targetRotY = 0;
 
-            const cosA = Math.cos(0.4), sinA = Math.sin(0.4);
-            pos[i * 3]     = rx;
-            pos[i * 3 + 1] = ry * cosA - rz * sinA;
-            pos[i * 3 + 2] = ry * sinA + rz * cosA;
+let currentRotX = 0;
+let currentRotY = 0;
 
-            col[i * 3]     = 1.0; 
-            col[i * 3 + 1] = 0.85; 
-            col[i * 3 + 2] = 0.2;
-        }
-    }
-    return { pos, col };
-}
+let hand1 = null;
+let hand2 = null;
 
-function generateCube() {
-    const pos = new Float32Array(NUM_PARTICLES * 3);
-    const col = new Float32Array(NUM_PARTICLES * 3);
-    for (let i = 0; i < NUM_PARTICLES; i++) {
-        pos[i * 3]     = (Math.random() - 0.5) * 6;
-        pos[i * 3 + 1] = (Math.random() - 0.5) * 6;
-        pos[i * 3 + 2] = (Math.random() - 0.5) * 6;
 
-        col[i * 3]     = 1.0; 
-        col[i * 3 + 1] = 0.1; 
-        col[i * 3 + 2] = 0.8;
-    }
-    return { pos, col };
-}
+/* =========================================================
+   THREE.JS SETUP
+========================================================= */
 
-let shapes = {};
+function initThree(){
 
-// ==========================================
-// THREE.JS SETUP
-// ==========================================
-
-function initThree() {
-    shapes = {
-        random: generateRandomParticles(),
-        text: generateTextILoveYou(),
-        heart: generateHeart(),
-        saturn: generateSaturn(),
-        cube: generateCube()
-    };
-
-    const container = document.getElementById('webgl-container');
     scene = new THREE.Scene();
 
-    camera3D = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera3D.position.z = 13;
+    /*
+       CAMERA
+    */
 
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    container.appendChild(renderer.domElement);
+    const camera =
+        new THREE.OrthographicCamera(
+            -1,
+             1,
+             1,
+            -1,
+            0.1,
+            100
+        );
 
-    geometry = new THREE.BufferGeometry();
-    
-    const initData = shapes.random;
-    for (let i = 0; i < NUM_PARTICLES * 3; i++) {
-        currentPositions[i] = initData.pos[i];
-        targetPositions[i]  = initData.pos[i];
-        currentColors[i]    = initData.col[i];
-        targetColors[i]     = initData.col[i];
-    }
+    camera.position.z = 10;
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(currentPositions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(currentColors, 3));
+    scene.userData.camera = camera;
 
-    const material = new THREE.PointsMaterial({
-        size: 0.14,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.9,
-        blending: THREE.AdditiveBlending
+
+    /*
+       RENDERER
+    */
+
+    renderer =
+        new THREE.WebGLRenderer({
+            canvas:threeCanvas,
+            alpha:true,
+            antialias:true
+        });
+
+    renderer.setPixelRatio(
+        Math.min(window.devicePixelRatio,2)
+    );
+
+    renderer.setSize(
+        window.innerWidth,
+        window.innerHeight
+    );
+
+
+    /*
+       LIGHT
+    */
+
+    const ambient =
+        new THREE.AmbientLight(
+            0xffffff,
+            2
+        );
+
+    scene.add(ambient);
+
+
+    const directional =
+        new THREE.DirectionalLight(
+            0xffffff,
+            3
+        );
+
+    directional.position.set(
+        2,
+        3,
+        5
+    );
+
+    scene.add(directional);
+
+
+    /*
+       WHALE
+    */
+
+    whaleGroup =
+        new THREE.Group();
+
+    scene.add(whaleGroup);
+
+
+    createWhale();
+
+
+    /*
+       BOUNDING BOX
+    */
+
+    createBoundingBox();
+
+
+    /*
+       RESIZE
+    */
+
+    window.addEventListener(
+        "resize",
+        resize
+    );
+
+
+    animate();
+}
+
+
+/* =========================================================
+   CREATE BLUE WHALE
+========================================================= */
+
+function createWhale(){
+
+    whaleGroup.clear();
+
+
+    /*
+       BODY
+    */
+
+    const bodyGeometry =
+        new THREE.SphereGeometry(
+            1,
+            48,
+            32
+        );
+
+    const bodyMaterial =
+        new THREE.MeshStandardMaterial({
+
+            color:0x1677a8,
+
+            roughness:.42,
+
+            metalness:.05
+
+        });
+
+    const body =
+        new THREE.Mesh(
+            bodyGeometry,
+            bodyMaterial
+        );
+
+    body.scale.set(
+        1.65,
+        .65,
+        .65
+    );
+
+    whaleGroup.add(body);
+
+
+    /*
+       HEAD
+    */
+
+    const headGeometry =
+        new THREE.SphereGeometry(
+            .65,
+            40,
+            28
+        );
+
+    const headMaterial =
+        new THREE.MeshStandardMaterial({
+
+            color:0x238bb9,
+
+            roughness:.4
+
+        });
+
+    const head =
+        new THREE.Mesh(
+            headGeometry,
+            headMaterial
+        );
+
+    head.position.x = 1.25;
+
+    head.scale.set(
+        1.05,
+        .8,
+        .8
+    );
+
+    whaleGroup.add(head);
+
+
+    /*
+       SNOUT
+    */
+
+    const snoutGeometry =
+        new THREE.SphereGeometry(
+            .38,
+            32,
+            20
+        );
+
+    const snout =
+        new THREE.Mesh(
+            snoutGeometry,
+            bodyMaterial
+        );
+
+    snout.position.set(
+        1.85,
+        -.02,
+        0
+    );
+
+    snout.scale.set(
+        1.2,
+        .55,
+        .8
+    );
+
+    whaleGroup.add(snout);
+
+
+    /*
+       DORSAL FIN
+    */
+
+    const finMaterial =
+        new THREE.MeshStandardMaterial({
+
+            color:0x0d5276,
+
+            side:THREE.DoubleSide,
+
+            roughness:.5
+
+        });
+
+
+    const dorsalShape =
+        new THREE.Shape();
+
+    dorsalShape.moveTo(0,0);
+
+    dorsalShape.lineTo(
+        .25,
+        .75
+    );
+
+    dorsalShape.lineTo(
+        .55,
+        0
+    );
+
+    dorsalShape.lineTo(
+        0,
+        0
+    );
+
+
+    const dorsalGeometry =
+        new THREE.ShapeGeometry(
+            dorsalShape
+        );
+
+    const dorsal =
+        new THREE.Mesh(
+            dorsalGeometry,
+            finMaterial
+        );
+
+    dorsal.position.set(
+        -.1,
+        .48,
+        0
+    );
+
+    dorsal.rotation.x =
+        Math.PI / 2;
+
+    whaleGroup.add(dorsal);
+
+
+    /*
+       LEFT FLIPPER
+    */
+
+    const flipperShape =
+        new THREE.Shape();
+
+    flipperShape.moveTo(0,0);
+
+    flipperShape.quadraticCurveTo(
+        -.2,
+        -.1,
+        -.9,
+        -.75
+    );
+
+    flipperShape.quadraticCurveTo(
+        -.45,
+        -.15,
+        .1,
+        .05
+    );
+
+    const flipperGeometry =
+        new THREE.ShapeGeometry(
+            flipperShape
+        );
+
+    const leftFlipper =
+        new THREE.Mesh(
+            flipperGeometry,
+            finMaterial
+        );
+
+    leftFlipper.position.set(
+        .45,
+        -.25,
+        .45
+    );
+
+    leftFlipper.rotation.x =
+        -0.4;
+
+    whaleGroup.add(leftFlipper);
+
+
+    /*
+       RIGHT FLIPPER
+    */
+
+    const rightFlipper =
+        new THREE.Mesh(
+            flipperGeometry,
+            finMaterial
+        );
+
+    rightFlipper.position.set(
+        .45,
+        -.25,
+        -.45
+    );
+
+    rightFlipper.rotation.x =
+        -0.4;
+
+    rightFlipper.rotation.y =
+        Math.PI;
+
+    whaleGroup.add(rightFlipper);
+
+
+    /*
+       TAIL
+    */
+
+    createTail(
+        -1.65,
+        0,
+        0,
+        1
+    );
+
+
+    /*
+       EYE
+    */
+
+    createEye(
+        1.65,
+        .22,
+        .48
+    );
+
+    createEye(
+        1.65,
+        .22,
+        -.48
+    );
+
+
+    /*
+       MOUTH LINE
+    */
+
+    const mouthCurve =
+        new THREE.EllipseCurve(
+            1.72,
+            -.02,
+            .3,
+            .12,
+            0,
+            Math.PI,
+            false,
+            0
+        );
+
+    const mouthPoints =
+        mouthCurve.getPoints(30);
+
+    const mouthGeometry =
+        new THREE.BufferGeometry()
+            .setFromPoints(
+                mouthPoints.map(
+                    p =>
+                        new THREE.Vector3(
+                            p.x,
+                            p.y,
+                            .61
+                        )
+                )
+            );
+
+    const mouthMaterial =
+        new THREE.LineBasicMaterial({
+            color:0x062f45
+        });
+
+    const mouth =
+        new THREE.Line(
+            mouthGeometry,
+            mouthMaterial
+        );
+
+    whaleGroup.add(mouth);
+
+
+    /*
+       WHALE HIGHLIGHT
+    */
+
+    const highlightGeometry =
+        new THREE.SphereGeometry(
+            1,
+            32,
+            20
+        );
+
+    const highlightMaterial =
+        new THREE.MeshBasicMaterial({
+
+            color:0x55d8ff,
+
+            transparent:true,
+
+            opacity:.12
+
+        });
+
+    const highlight =
+        new THREE.Mesh(
+            highlightGeometry,
+            highlightMaterial
+        );
+
+    highlight.scale.set(
+        1.5,
+        .35,
+        .7
+    );
+
+    highlight.position.set(
+        .3,
+        .2,
+        .1
+    );
+
+    whaleGroup.add(highlight);
+}
+
+
+/* =========================================================
+   TAIL
+========================================================= */
+
+function createTail(
+    x,
+    y,
+    z,
+    direction
+){
+
+    const material =
+        new THREE.MeshStandardMaterial({
+
+            color:0x0d5276,
+
+            side:THREE.DoubleSide,
+
+            roughness:.5
+
+        });
+
+
+    const shape =
+        new THREE.Shape();
+
+    shape.moveTo(0,0);
+
+    shape.quadraticCurveTo(
+        -.35,
+        .65,
+        -.85,
+        .55
+    );
+
+    shape.quadraticCurveTo(
+        -.5,
+        .1,
+        0,
+        0
+    );
+
+
+    const geo =
+        new THREE.ShapeGeometry(
+            shape
+        );
+
+
+    const tail1 =
+        new THREE.Mesh(
+            geo,
+            material
+        );
+
+    tail1.position.set(
+        x,
+        y,
+        z + .2
+    );
+
+    tail1.rotation.y =
+        Math.PI / 2;
+
+    whaleGroup.add(tail1);
+
+
+    const tail2 =
+        new THREE.Mesh(
+            geo,
+            material
+        );
+
+    tail2.position.set(
+        x,
+        y,
+        z - .2
+    );
+
+    tail2.rotation.y =
+        Math.PI / 2;
+
+    tail2.rotation.z =
+        Math.PI;
+
+    whaleGroup.add(tail2);
+}
+
+
+/* =========================================================
+   EYES
+========================================================= */
+
+function createEye(
+    x,
+    y,
+    z
+){
+
+    const geo =
+        new THREE.SphereGeometry(
+            .055,
+            16,
+            16
+        );
+
+    const mat =
+        new THREE.MeshBasicMaterial({
+            color:0x020609
+        });
+
+    const eye =
+        new THREE.Mesh(
+            geo,
+            mat
+        );
+
+    eye.position.set(
+        x,
+        y,
+        z
+    );
+
+    whaleGroup.add(eye);
+}
+
+
+/* =========================================================
+   BOUNDING BOX
+========================================================= */
+
+function createBoundingBox(){
+
+    const boxGeo =
+        new THREE.BoxGeometry(
+            3.8,
+            1.8,
+            1.7
+        );
+
+
+    const edges =
+        new THREE.EdgesGeometry(
+            boxGeo
+        );
+
+
+    const material =
+        new THREE.LineBasicMaterial({
+
+            color:0xffffff,
+
+            transparent:true,
+
+            opacity:.75
+
+        });
+
+
+    boundingBox =
+        new THREE.LineSegments(
+            edges,
+            material
+        );
+
+
+    boundingBox.scale.set(
+        1.05,
+        1.05,
+        1.05
+    );
+
+
+    whaleGroup.add(
+        boundingBox
+    );
+}
+
+
+/* =========================================================
+   MEDIAPIPE HANDS
+========================================================= */
+
+const hands =
+    new Hands({
+
+        locateFile:
+        file => {
+
+            return `
+            https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}
+            `;
+
+        }
+
     });
 
-    particleSystem = new THREE.Points(geometry, material);
-    scene.add(particleSystem);
-
-    window.addEventListener('resize', onWindowResize);
-}
-
-function onWindowResize() {
-    camera3D.aspect = window.innerWidth / window.innerHeight;
-    camera3D.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-function setTargetShape(shapeName) {
-    if (activeShape === shapeName) return;
-    activeShape = shapeName;
-    const shapeData = shapes[shapeName];
-    for (let i = 0; i < NUM_PARTICLES * 3; i++) {
-        targetPositions[i] = shapeData.pos[i];
-        targetColors[i]    = shapeData.col[i];
-    }
-}
-
-// ==========================================
-// DETEKSI GESTUR & POSISI TANGAN
-// ==========================================
-
-function processHand(lm) {
-    const palmX = (0.5 - lm[9].x) * 14;
-    const palmY = (0.5 - lm[9].y) * 10;
-    
-    targetHandX = palmX;
-    targetHandY = palmY;
-
-    const wrist = lm[0];
-    const dist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
-
-    const indexOpen  = dist(lm[8], wrist) > dist(lm[6], wrist);
-    const middleOpen = dist(lm[12], wrist) > dist(lm[10], wrist);
-    const ringOpen   = dist(lm[16], wrist) > dist(lm[14], wrist);
-    const pinkyOpen  = dist(lm[20], wrist) > dist(lm[18], wrist);
-
-    if (indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
-        setTargetShape('saturn');
-        ui.textContent = "☝️ 1 JARI → CINCIN SATURNUS";
-    }
-    else if (indexOpen && middleOpen && !ringOpen && !pinkyOpen) {
-        setTargetShape('cube');
-        ui.textContent = "✌️ 2 JARI → KUBUS PARTIKEL";
-    }
-    else if (!indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
-        setTargetShape('heart');
-        ui.textContent = "✊ GENGGAM → BENTUK HEART ❤️";
-    }
-    else if (indexOpen && middleOpen && ringOpen && pinkyOpen) {
-        setTargetShape('text');
-        ui.textContent = "✋ TELAPAK BUKA → TEKS I LOVE YOU 💙";
-    }
-}
-
-// ==========================================
-// MEDIAPIPE HANDS
-// ==========================================
-
-const hands = new Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-});
 
 hands.setOptions({
-    maxNumHands: 1,
-    modelComplexity: 0, // Diturunkan ke 0 agar AI sangat ringan & responsif
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
+
+    maxNumHands:2,
+
+    modelComplexity:1,
+
+    minDetectionConfidence:.65,
+
+    minTrackingConfidence:.6
+
 });
 
-hands.onResults((results) => {
-    canvasCtx.save();
-    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        const landmarks = results.multiHandLandmarks[0];
+hands.onResults(
+    onHands
+);
 
-        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FFCC', lineWidth: 2 });
-        drawLandmarks(canvasCtx, landmarks, { color: '#FF0055', lineWidth: 1, radius: 3 });
 
-        processHand(landmarks);
-    } else {
-        setTargetShape('random');
-        ui.textContent = "✋ TUNJUKKAN GESTUR JARI";
+/* =========================================================
+   CAMERA START
+========================================================= */
+
+async function startCamera(){
+
+    try{
+
+        statusText.innerText =
+            "Meminta izin kamera...";
+
+
+        const stream =
+            await navigator.mediaDevices
+                .getUserMedia({
+
+                    video:{
+                        facingMode:"user",
+
+                        width:{
+                            ideal:1280
+                        },
+
+                        height:{
+                            ideal:720
+                        }
+                    },
+
+                    audio:false
+
+                });
+
+
+        video.srcObject =
+            stream;
+
+
+        await video.play();
+
+
+        loading.style.display =
+            "none";
+
+        startBtn.style.display =
+            "none";
+
+
+        statusText.innerText =
+            "Kamera aktif";
+
+
+        resize();
+
+
+        processCamera();
+
+
+    }catch(error){
+
+        console.error(error);
+
+        loading.style.display =
+            "none";
+
+        errorBox.style.display =
+            "block";
+
+        errorBox.innerHTML = `
+            <b>Kamera tidak bisa dibuka</b>
+            <br><br>
+            Pastikan izin kamera diberikan
+            dan website dibuka melalui HTTPS.
+            <br><br>
+            Jika menggunakan file HTML langsung,
+            coba jalankan melalui server lokal
+            atau upload ke Vercel/Netlify.
+        `;
+
     }
-    canvasCtx.restore();
-});
 
-// ==========================================
-// RENDER LOOP (FAST & SMOOTH TRANSITION)
-// ==========================================
-
-function animate() {
-    requestAnimationFrame(animate);
-
-    const positions = geometry.attributes.position.array;
-    const colorsArr = geometry.attributes.color.array;
-
-    // Kecepatan transisi LERP dinaikkan jadi 0.20 agar gerakannya kilat & super smooth!
-    for (let i = 0; i < NUM_PARTICLES * 3; i++) {
-        positions[i] += (targetPositions[i] - positions[i]) * 0.20;
-        colorsArr[i] += (targetColors[i] - colorsArr[i]) * 0.20;
-    }
-    geometry.attributes.position.needsUpdate = true;
-    geometry.attributes.color.needsUpdate = true;
-
-    if (particleSystem) {
-        particleSystem.position.x += (targetHandX - particleSystem.position.x) * 0.15;
-        particleSystem.position.y += (targetHandY - particleSystem.position.y) * 0.15;
-
-        if (activeShape !== 'text') {
-            particleSystem.rotation.y += 0.008;
-        } else {
-            particleSystem.rotation.y = 0;
-        }
-    }
-
-    renderer.render(scene, camera3D);
 }
 
-// ==========================================
-// START CAMERA
-// ==========================================
 
-startBtn.addEventListener('click', async () => {
-    startBtn.style.display = 'none';
-    loading.style.display = 'block';
+/* =========================================================
+   PROCESS CAMERA
+========================================================= */
 
-    if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
-    }
+async function processCamera(){
 
-    initThree();
-    animate();
+    if(
+        video.readyState >= 2
+    ){
 
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 360 } },
-            audio: false
+        await hands.send({
+            image:video
         });
 
-        video.srcObject = stream;
-
-        video.onloadedmetadata = () => {
-            canvasElement.width = video.videoWidth;
-            canvasElement.height = video.videoHeight;
-        };
-
-        const cameraUtils = new Camera(video, {
-            onFrame: async () => {
-                await hands.send({ image: video });
-            },
-            width: 480,
-            height: 360
-        });
-
-        cameraUtils.start();
-        loading.style.display = 'none';
-    } catch (err) {
-        loading.style.display = 'none';
-        startBtn.style.display = 'block';
-        alert('Kamera gagal dibuka!');
-        console.error(err);
     }
-});
+
+    requestAnimationFrame(
+        processCamera
+    );
+}
+
+
+/* =========================================================
+   HAND RESULTS
+========================================================= */
+
+function onHands(results){
+
+    drawHands(results);
+
+
+    if(
+        !results.multiHandLandmarks ||
+        results.multiHandLandmarks.length === 0
+    ){
+
+        handsDetected = 0;
+
+        statusText.innerText =
+            "Cari tangan...";
+
+        return;
+
+    }
+
+
+    handsDetected =
+        results.multiHandLandmarks.length;
+
+
+    if(
+        handsDetected === 1
+    ){
+
+        hand1 =
+            results.multiHandLandmarks[0];
+
+        hand2 = null;
+
+        controlWithOneHand();
+
+    }else{
+
+        hand1 =
+            results.multiHandLandmarks[0];
+
+        hand2 =
+            results.multiHandLandmarks[1];
+
+        controlWithTwoHands();
+
+    }
+
+
+    statusText.innerText =
+        handsDetected +
+        " tangan terdeteksi";
+}
+
+
+/* =========================================================
+   ONE HAND CONTROL
+========================================================= */
+
+function controlWithOneHand(){
+
+    const wrist =
+        hand1[0];
+
+
+    /*
+       MIRROR X
+    */
+
+    targetX =
+        (0.5 - wrist.x) * 4.2;
+
+
+    targetY =
+        (0.5 - wrist.y) * 3.2;
+
+
+    targetScale =
+        1.15;
+
+
+    targetRotY =
+        (0.5 - wrist.x) *
+        1.5;
+
+
+    targetRotX =
+        (wrist.y - 0.5) *
+        1.0;
+}
+
+
+/* =========================================================
+   TWO HAND CONTROL
+========================================================= */
+
+function controlWithTwoHands(){
+
+    const a =
+        hand1[9];
+
+    const b =
+        hand2[9];
+
+
+    /*
+       CENTER
+    */
+
+    const centerX =
+        (a.x + b.x) / 2;
+
+    const centerY =
+        (a.y + b.y) / 2;
+
+
+    /*
+       POSITION
+    */
+
+    targetX =
+        (0.5 - centerX) *
+        4.2;
+
+    targetY =
+        (0.5 - centerY) *
+        3.2;
+
+
+    /*
+       DISTANCE
+    */
+
+    const dx =
+        a.x - b.x;
+
+    const dy =
+        a.y - b.y;
+
+    const distance =
+        Math.sqrt(
+            dx * dx +
+            dy * dy
+        );
+
+
+    /*
+       SCALE
+    */
+
+    targetScale =
+        THREE.MathUtils.clamp(
+            distance * 4.2,
+            .55,
+            2.8
+        );
+
+
+    /*
+       ROTATION
+    */
+
+    targetRotY =
+        (centerX - .5) *
+        -2.0;
+
+
+    targetRotX =
+        (centerY - .5) *
+        1.2;
+}
+
+
+/* =========================================================
+   DRAW HANDS
+========================================================= */
+
+function drawHands(results){
+
+    handCtx.clearRect(
+        0,
+        0,
+        handCanvas.width,
+        handCanvas.height
+    );
+
+
+    if(
+        !results.multiHandLandmarks
+    ) return;
+
+
+    for(
+        const landmarks
+        of results.multiHandLandmarks
+    ){
+
+        /*
+           LANDMARK DOTS
+        */
+
+        for(
+            const point
+            of landmarks
+        ){
+
+            const x =
+                (1 - point.x) *
+                handCanvas.width;
+
+            const y =
+                point.y *
+                handCanvas.height;
+
+
+            handCtx.beginPath();
+
+            handCtx.arc(
+                x,
+                y,
+                3,
+                0,
+                Math.PI * 2
+            );
+
+            handCtx.fillStyle =
+                "rgba(255,255,255,.9)";
+
+            handCtx.fill();
+
+        }
+
+
+        /*
+           CONNECTIONS
+        */
+
+        const connections = [
+
+            [0,1],
+            [1,2],
+            [2,3],
+            [3,4],
+
+            [0,5],
+            [5,6],
+            [6,7],
+            [7,8],
+
+            [5,9],
+            [9,10],
+            [10,11],
+            [11,12],
+
+            [9,13],
+            [13,14],
+            [14,15],
+            [15,16],
+
+            [13,17],
+            [17,18],
+            [18,19],
+            [19,20],
+
+            [0,17]
+
+        ];
+
+
+        handCtx.lineWidth =
+            1;
+
+
+        handCtx.strokeStyle =
+            "rgba(255,255,255,.35)";
+
+
+        for(
+            const pair
+            of connections
+        ){
+
+            const p1 =
+                landmarks[pair[0]];
+
+            const p2 =
+                landmarks[pair[1]];
+
+
+            handCtx.beginPath();
+
+            handCtx.moveTo(
+                (1-p1.x) *
+                handCanvas.width,
+
+                p1.y *
+                handCanvas.height
+            );
+
+            handCtx.lineTo(
+                (1-p2.x) *
+                handCanvas.width,
+
+                p2.y *
+                handCanvas.height
+            );
+
+            handCtx.stroke();
+        }
+
+    }
+
+}
+
+
+/* =========================================================
+   ANIMATION
+========================================================= */
+
+function animate(){
+
+    requestAnimationFrame(
+        animate
+    );
+
+
+    /*
+       SMOOTH MOVEMENT
+    */
+
+    currentX +=
+        (targetX - currentX) *
+        .09;
+
+
+    currentY +=
+        (targetY - currentY) *
+        .09;
+
+
+    currentScale +=
+        (targetScale - currentScale) *
+        .09;
+
+
+    currentRotX +=
+        (targetRotX - currentRotX) *
+        .07;
+
+
+    currentRotY +=
+        (targetRotY - currentRotY) *
+        .07;
+
+
+    /*
+       APPLY POSITION
+    */
+
+    whaleGroup.position.x =
+        currentX;
+
+
+    whaleGroup.position.y =
+        currentY;
+
+
+    whaleGroup.scale.setScalar(
+        currentScale
+    );
+
+
+    whaleGroup.rotation.x =
+        currentRotX;
+
+
+    whaleGroup.rotation.y =
+        currentRotY;
+
+
+    /*
+       FLOATING EFFECT
+    */
+
+    const time =
+        performance.now() *
+        0.001;
+
+
+    whaleGroup.position.z =
+        Math.sin(time * 1.5) *
+        0.08;
+
+
+    /*
+       SWIMMING MOTION
+    */
+
+    const tailWave =
+        Math.sin(time * 3) *
+        0.08;
+
+
+    whaleGroup.rotation.z =
+        tailWave;
+
+
+    render();
+}
+
+
+/* =========================================================
+   RENDER
+========================================================= */
+
+function render(){
+
+    const camera =
+        scene.userData.camera;
+
+
+    renderer.render(
+        scene,
+        camera
+    );
+}
+
+
+/* =========================================================
+   RESIZE
+========================================================= */
+
+function resize(){
+
+    const w =
+        window.innerWidth;
+
+    const h =
+        window.innerHeight;
+
+
+    renderer.setSize(
+        w,
+        h
+    );
+
+
+    handCanvas.width =
+        w;
+
+    handCanvas.height =
+        h;
+
+
+    /*
+       CAMERA ASPECT
+    */
+
+    const aspect =
+        w / h;
+
+
+    const camera =
+        scene.userData.camera;
+
+
+    camera.left =
+        -aspect;
+
+    camera.right =
+        aspect;
+
+    camera.top =
+        1;
+
+    camera.bottom =
+        -1;
+
+
+    camera.updateProjectionMatrix();
+}
+
+
+/* =========================================================
+   START BUTTON
+========================================================= */
+
+startBtn.addEventListener(
+    "click",
+    startCamera
+);
+
+
+/* =========================================================
+   INITIALIZE
+========================================================= */
+
+initThree();
+
 </script>
 
 </body>
